@@ -3,6 +3,7 @@ package com.pipkeypet.android
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothManager
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -43,7 +44,9 @@ class MainActivity : Activity() {
                 Manifest.permission.BLUETOOTH_CONNECT
             )
         } else {
-            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,7 +66,7 @@ class MainActivity : Activity() {
         }
 
         status = TextView(this).apply {
-            text = "Android Companion v0.3\nReady to scan"
+            text = "Android Companion v0.4\nReady to scan"
             textSize = 16f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
@@ -73,8 +76,11 @@ class MainActivity : Activity() {
         scanButton = Button(this).apply {
             text = "SCAN BLUETOOTH"
             setOnClickListener {
-                if (scanning) stopScanning()
-                else checkAndScan()
+                if (scanning) {
+                    stopScanning()
+                } else {
+                    checkAndScan()
+                }
             }
         }
 
@@ -89,6 +95,7 @@ class MainActivity : Activity() {
         root.addView(title)
         root.addView(status)
         root.addView(scanButton)
+
         root.addView(
             scroll,
             LinearLayout.LayoutParams(
@@ -102,14 +109,19 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (scanning) {
                     val existing = devices[address]
+
                     if (existing == null) {
-                        devices[address] = DeviceInfo(name, rssi)
+                        devices[address] = DeviceInfo(
+                            name, rssi
+                        )
                     } else {
                         existing.rssi = rssi
+
                         if (name != "Unknown device") {
                             existing.name = name
                         }
                     }
+
                     renderDevices()
                 }
             }
@@ -126,12 +138,23 @@ class MainActivity : Activity() {
         deviceList.removeAllViews()
 
         for ((address, device) in devices) {
+
             val item = TextView(this).apply {
                 text = "${device.name}\n$address\nSignal: ${device.rssi} dBm"
                 textSize = 15f
                 setTextColor(Color.WHITE)
                 setPadding(16, 18, 16, 18)
-                setBackgroundColor(Color.rgb(35, 40, 55))
+                setBackgroundColor(
+                    Color.rgb(35, 40, 55)
+                )
+
+                setOnClickListener {
+                    showDeviceDialog(
+                        device.name,
+                        address,
+                        device.rssi
+                    )
+                }
             }
 
             deviceList.addView(
@@ -145,6 +168,22 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showDeviceDialog(
+        name: String,
+        address: String,
+        rssi: Int
+    ) {
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setMessage(
+                "Bluetooth address:\n$address\n\n" +
+                "Signal: $rssi dBm\n\n" +
+                "Connection is not implemented yet."
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun checkAndScan() {
         val missing = requiredPermissions().filter {
             checkSelfPermission(it) !=
@@ -153,7 +192,8 @@ class MainActivity : Activity() {
 
         if (missing.isNotEmpty()) {
             requestPermissions(
-                missing.toTypedArray(), 100
+                missing.toTypedArray(),
+                100
             )
         } else {
             startScanning()
@@ -166,7 +206,9 @@ class MainActivity : Activity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(
-            requestCode, permissions, grantResults
+            requestCode,
+            permissions,
+            grantResults
         )
 
         if (requestCode == 100) {
@@ -177,7 +219,8 @@ class MainActivity : Activity() {
             ) {
                 startScanning()
             } else {
-                status.text = "Bluetooth permission denied"
+                status.text =
+                    "Bluetooth permission denied"
             }
         }
     }
@@ -200,12 +243,18 @@ class MainActivity : Activity() {
                 scanning = true
                 scanButton.text = "STOP SCAN"
                 status.text = "Scanning..."
-                handler.postDelayed(scanTimeout, 10000)
+
+                handler.postDelayed(
+                    scanTimeout,
+                    10000
+                )
             } else {
-                status.text = "Unable to start BLE scan"
+                status.text =
+                    "Unable to start BLE scan"
             }
         } catch (e: SecurityException) {
-            status.text = "Bluetooth permission error"
+            status.text =
+                "Bluetooth permission error"
         } catch (e: Exception) {
             status.text = "BLE scan failed"
         }
@@ -228,7 +277,8 @@ class MainActivity : Activity() {
         }
 
         if (::status.isInitialized) {
-            status.text = "Scan finished. Found ${devices.size} devices"
+            status.text =
+                "Scan finished. Found ${devices.size} devices"
         }
     }
 
