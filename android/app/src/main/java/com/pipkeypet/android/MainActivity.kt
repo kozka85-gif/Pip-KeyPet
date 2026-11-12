@@ -13,18 +13,24 @@ import android.os.Looper
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 
 class MainActivity : Activity() {
 
+    private data class DeviceInfo(
+        var name: String,
+        var rssi: Int
+    )
+
     private lateinit var scanner: BleScanner
     private lateinit var status: TextView
-    private lateinit var button: Button
+    private lateinit var deviceList: LinearLayout
+    private lateinit var scanButton: Button
 
     private val handler = Handler(Looper.getMainLooper())
+    private val devices = linkedMapOf<String, DeviceInfo>()
     private var scanning = false
-    private val devices = mutableSetOf<String>()
 
     private val scanTimeout = Runnable {
         stopScanning()
@@ -43,61 +49,112 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val layout = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(32, 32, 32, 32)
+            setPadding(24, 32, 24, 24)
             setBackgroundColor(Color.rgb(20, 24, 35))
         }
 
         val title = TextView(this).apply {
             text = "PIP KEY PET"
-            textSize = 28f
+            textSize = 27f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
 
         status = TextView(this).apply {
-            text = "Android Companion v0.2\n\nReady to scan"
-            textSize = 17f
+            text = "Android Companion v0.3\nReady to scan"
+            textSize = 16f
             setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
-            setPadding(0, 40, 0, 40)
+            setPadding(0, 24, 0, 24)
         }
 
-        button = Button(this).apply {
+        scanButton = Button(this).apply {
             text = "SCAN BLUETOOTH"
-            setOnClickListener { checkAndScan() }
+            setOnClickListener {
+                if (scanning) stopScanning()
+                else checkAndScan()
+            }
         }
 
-        layout.addView(title)
-        layout.addView(status)
-        layout.addView(button)
-        setContentView(layout)
+        deviceList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
 
-        scanner = BleScanner(this) { name, address ->
+        val scroll = ScrollView(this).apply {
+            addView(deviceList)
+        }
+
+        root.addView(title)
+        root.addView(status)
+        root.addView(scanButton)
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                -1, 0, 1f
+            )
+        )
+
+        setContentView(root)
+
+        scanner = BleScanner(this) { name, address, rssi ->
             runOnUiThread {
-                if (scanning && devices.add(address)) {
-                    status.text =
-                        "Devices found: ${devices.size}\n\n" +
-                        "$name\n$address"
+                if (scanning) {
+                    val existing = devices[address]
+                    if (existing == null) {
+                        devices[address] = DeviceInfo(name, rssi)
+                    } else {
+                        existing.rssi = rssi
+                        if (name != "Unknown device") {
+                            existing.name = name
+                        }
+                    }
+                    renderDevices()
                 }
             }
         }
     }
 
-    private fun checkAndScan() {
-        if (scanning) {
-            stopScanning()
-            return
+    private fun renderDevices() {
+        status.text = if (scanning) {
+            "Scanning... Found ${devices.size} devices"
+        } else {
+            "Found ${devices.size} devices"
         }
 
+        deviceList.removeAllViews()
+
+        for ((address, device) in devices) {
+            val item = TextView(this).apply {
+                text = "${device.name}\n$address\nSignal: ${device.rssi} dBm"
+                textSize = 15f
+                setTextColor(Color.WHITE)
+                setPadding(16, 18, 16, 18)
+                setBackgroundColor(Color.rgb(35, 40, 55))
+            }
+
+            deviceList.addView(
+                item,
+                LinearLayout.LayoutParams(
+                    -1, -2
+                ).apply {
+                    bottomMargin = 8
+                }
+            )
+        }
+    }
+
+    private fun checkAndScan() {
         val missing = requiredPermissions().filter {
-            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(it) !=
+                PackageManager.PERMISSION_GRANTED
         }
 
         if (missing.isNotEmpty()) {
-            requestPermissions(missing.toTypedArray(), 100)
+            requestPermissions(
+                missing.toTypedArray(), 100
+            )
         } else {
             startScanning()
         }
@@ -136,12 +193,13 @@ class MainActivity : Activity() {
         }
 
         devices.clear()
+        deviceList.removeAllViews()
 
         try {
             if (scanner.startScan()) {
                 scanning = true
-                status.text = "Scanning Bluetooth devices..."
-                button.text = "STOP SCAN"
+                scanButton.text = "STOP SCAN"
+                status.text = "Scanning..."
                 handler.postDelayed(scanTimeout, 10000)
             } else {
                 status.text = "Unable to start BLE scan"
@@ -164,16 +222,13 @@ class MainActivity : Activity() {
         }
 
         scanning = false
-        button.text = "SCAN BLUETOOTH"
 
-        if (devices.isEmpty()) {
-            status.text = "Scan finished. No devices found."
-        } else {
-            Toast.makeText(
-                this,
-                "Found ${devices.size} BLE devices",
-                Toast.LENGTH_SHORT
-            ).show()
+        if (::scanButton.isInitialized) {
+            scanButton.text = "SCAN BLUETOOTH"
+        }
+
+        if (::status.isInitialized) {
+            status.text = "Scan finished. Found ${devices.size} devices"
         }
     }
 
